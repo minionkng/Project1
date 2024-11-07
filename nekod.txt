@@ -1,0 +1,80 @@
+import random
+import telebot
+
+
+TOKEN = "7634526553:AAGovS-r-DlJ2jeuHKeZCwFJJ5Zo-70cOxk"
+bot = telebot.TeleBot(TOKEN)
+
+
+user_data = {}
+
+
+@bot.message_handler(commands=['start'])
+def start_game(message):
+    chat_id = message.chat.id
+    user_data[chat_id] = {'balance': 100, 'rounds': 10}
+    bot.send_message(chat_id, "Добро пожаловать в игру Рулетка! Ваш стартовый баланс: 100.\nВведите ставку для начала игры.")
+
+
+@bot.message_handler(func=lambda message: message.chat.id in user_data and user_data[message.chat.id]['rounds'] > 0)
+def place_bet(message):
+    chat_id = message.chat.id
+    try:
+        bet_amount = int(message.text)
+        if bet_amount > user_data[chat_id]['balance']:
+            bot.send_message(chat_id, "Ставка превышает ваш баланс! Попробуйте снова.")
+        else:
+            user_data[chat_id]['bet_amount'] = bet_amount
+            bot.send_message(chat_id, "Ставьте на 'чётное' или 'нечётное'.")
+            bot.register_next_step_handler(message, place_choice)
+    except ValueError:
+        bot.send_message(chat_id, "Введите корректную сумму ставки.")
+
+def place_choice(message):
+    chat_id = message.chat.id
+    choice = message.text.strip().lower()
+
+    if choice not in ['чётное', 'нечётное']:
+        bot.send_message(chat_id, "Введите 'чётное' или 'нечётное' для продолжения.")
+        return
+
+    user_data[chat_id]['choice'] = choice
+    play_round(chat_id)
+
+def play_round(chat_id):
+    bet_amount = user_data[chat_id]['bet_amount']
+    choice = user_data[chat_id]['choice']
+    balance = user_data[chat_id]['balance']
+
+   
+    result = random.randint(0, 36)
+    bot.send_message(chat_id, f"Выпало число: {result}")
+
+    
+    if result == 0:
+        bot.send_message(chat_id, "Выпало зеро! Вы проиграли.")
+        balance -= bet_amount
+    else:
+        is_even = result % 2 == 0
+        if (choice == 'чётное' and is_even) or (choice == 'нечётное' and not is_even):
+            bot.send_message(chat_id, "Вы выиграли!")
+            balance += bet_amount
+        else:
+            bot.send_message(chat_id, "Вы проиграли!")
+            balance -= bet_amount
+
+    user_data[chat_id]['balance'] = balance
+    user_data[chat_id]['rounds'] -= 1
+
+    
+    if balance <= 0:
+        bot.send_message(chat_id, "У вас закончились деньги! Игра окончена.")
+        del user_data[chat_id]
+    elif user_data[chat_id]['rounds'] <= 0:
+        bot.send_message(chat_id, "Игра окончена. Режим раундов завершён.")
+        del user_data[chat_id]
+    else:
+        bot.send_message(chat_id, f"Ваш текущий баланс: {balance}. Введите ставку для следующего раунда.")
+
+
+bot.polling()
